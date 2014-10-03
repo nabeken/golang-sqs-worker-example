@@ -1,6 +1,9 @@
-FROM google/golang
+FROM golang:1.3
 MAINTAINER TANABE Ken-ichi <nabeken@tknetworks.org>
 
-WORKDIR /gopath/src/github.com/nabeken/golang-sqs-worker-example
-ADD . /gopath/src/github.com/nabeken/golang-sqs-worker-example
-RUN go get -v ./...
+RUN mkdir -p /go/src/app
+WORKDIR /go/src/app
+
+COPY . /go/src/app
+RUN go-wrapper download ./...
+RUN go install ./...
