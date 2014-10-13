@@ -2,7 +2,6 @@ package worker
 
 import (
 	"log"
-	"os"
 	"sync"
 
 	"github.com/crowdmob/goamz/sqs"
@@ -20,30 +19,42 @@ type Handler interface {
 	HandleMessage(msg *sqs.Message) error
 }
 
-func Start(queue *sqs.Queue, h Handler) {
+func Start(q *sqs.Queue, h Handler) {
 	for {
 		log.Println("worker: Start polling")
-		poll(queue, h)
+		resp, err := q.ReceiveMessage(10)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		if len(resp.Messages) > 0 {
+			run(q, h, resp)
+		}
 	}
 }
 
-func Getenv(name, defaultVal string) string {
-	val := os.Getenv(name)
-	if val == "" {
-		return defaultVal
+// poll launches goroutine per received message and wait for all message to be processed
+func run(q *sqs.Queue, h Handler, resp *sqs.ReceiveMessageResponse) {
+	numMessages := len(resp.Messages)
+	log.Printf("worker: Received %d messages", numMessages)
+
+	var wg sync.WaitGroup
+	wg.Add(numMessages)
+	for i := range resp.Messages {
+		go func(m *sqs.Message) {
+			// launch goroutine
+			log.Println("worker: Spawned worker goroutine")
+			defer wg.Done()
+			if err := handleMessage(q, m, h); err != nil {
+				log.Println(err)
+			}
+		}(&resp.Messages[i])
 	}
-	return val
+
+	wg.Wait()
 }
 
-func NewSQSQueue(s *sqs.SQS, name string) (*sqs.Queue, error) {
-	stackName := Getenv("AWS_STACK_NAME", defaultStackName)
-	if stackName != "" {
-		stackName += "-"
-	}
-	return s.GetQueue(stackName + name)
-}
-
-func handleMessage(h Handler, q *sqs.Queue, m *sqs.Message) error {
+func handleMessage(q *sqs.Queue, m *sqs.Message, h Handler) error {
 	var err error
 	err = h.HandleMessage(m)
 	if err != nil {
@@ -51,32 +62,5 @@ func handleMessage(h Handler, q *sqs.Queue, m *sqs.Message) error {
 	}
 	// delete
 	_, err = q.DeleteMessage(m)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func poll(queue *sqs.Queue, h Handler) error {
-	messages, err := queue.ReceiveMessage(10)
-	if err != nil {
-		return err
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(len(messages.Messages))
-	for i := range messages.Messages {
-		// launch goroutine
-		log.Println("worker: Spawn worker goroutine")
-
-		go func(m *sqs.Message) {
-			defer wg.Done()
-			if err := handleMessage(h, queue, m); err != nil {
-				log.Println(err)
-			}
-		}(&messages.Messages[i])
-	}
-
-	wg.Wait()
-	return nil
+	return err
 }
