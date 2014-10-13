@@ -3,28 +3,27 @@ package worker
 import (
 	"log"
 	"os"
+	"sync"
 
 	"github.com/crowdmob/goamz/sqs"
 )
 
 var defaultStackName = "golang-sqsl-worker-example"
 
-type HandlerFunc func(msg *sqs.Message) bool
+type HandlerFunc func(msg *sqs.Message) error
 
-func (f HandlerFunc) HandleMessage(msg *sqs.Message) bool {
+func (f HandlerFunc) HandleMessage(msg *sqs.Message) error {
 	return f(msg)
 }
 
 type Handler interface {
-	HandleMessage(msg *sqs.Message) bool
+	HandleMessage(msg *sqs.Message) error
 }
 
-func Start(queue *sqs.Queue, h Handler) error {
+func Start(queue *sqs.Queue, h Handler) {
 	for {
 		log.Println("worker: Start polling")
-		if err := poll(queue, h); err != nil {
-			return err
-		}
+		poll(queue, h)
 	}
 }
 
@@ -44,21 +43,40 @@ func NewSQSQueue(s *sqs.SQS, name string) (*sqs.Queue, error) {
 	return s.GetQueue(stackName + name)
 }
 
+func handleMessage(h Handler, q *sqs.Queue, m *sqs.Message) error {
+	var err error
+	err = h.HandleMessage(m)
+	if err != nil {
+		return err
+	}
+	// delete
+	_, err = q.DeleteMessage(m)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func poll(queue *sqs.Queue, h Handler) error {
 	messages, err := queue.ReceiveMessage(10)
 	if err != nil {
 		return err
 	}
+
+	var wg sync.WaitGroup
+	wg.Add(len(messages.Messages))
 	for i := range messages.Messages {
-		log.Println("worker: Process message")
-		if !h.HandleMessage(&messages.Messages[i]) {
-			// will retry
-			continue
-		}
-		// delete
-		if _, err := queue.DeleteMessage(&messages.Messages[i]); err != nil {
-			return err
-		}
+		// launch goroutine
+		log.Println("worker: Spawn worker goroutine")
+
+		go func(m *sqs.Message) {
+			defer wg.Done()
+			if err := handleMessage(h, queue, m); err != nil {
+				log.Println(err)
+			}
+		}(&messages.Messages[i])
 	}
+
+	wg.Wait()
 	return nil
 }

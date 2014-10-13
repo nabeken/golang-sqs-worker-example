@@ -11,9 +11,9 @@ import (
 	"github.com/nabeken/golang-sqs-worker-example/worker"
 )
 
-func Print(msg *sqs.Message) bool {
+func Print(msg *sqs.Message) error {
 	fmt.Println(msg.Body)
-	return true
+	return nil
 }
 
 func main() {
