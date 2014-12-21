@@ -3,7 +3,9 @@ package worker
 import (
 	"os"
 
-	"github.com/crowdmob/goamz/sqs"
+	"github.com/nabeken/aws-go-sqs/sqs"
+
+	gsqs "github.com/stripe/aws-go/gen/sqs"
 )
 
 func Getenv(name, defaultVal string) string {
@@ -14,10 +16,10 @@ func Getenv(name, defaultVal string) string {
 	return val
 }
 
-func NewSQSQueue(s *sqs.SQS, name string) (*sqs.Queue, error) {
+func NewSQSQueue(s *gsqs.SQS, name string) (*sqs.Queue, error) {
 	stackName := Getenv("AWS_STACK_NAME", defaultStackName)
 	if stackName != "" {
 		stackName += "-"
 	}
-	return s.GetQueue(stackName + name)
+	return sqs.New(s, stackName+name)
 }
