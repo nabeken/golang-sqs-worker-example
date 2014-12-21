@@ -4,25 +4,24 @@ import (
 	"log"
 	"sync"
 
-	"github.com/nabeken/aws-go-sqs/sqs"
-	"github.com/nabeken/aws-go-sqs/sqs/option"
-
-	gsqs "github.com/stripe/aws-go/gen/sqs"
+	"github.com/nabeken/aws-go-sqs/queue"
+	"github.com/nabeken/aws-go-sqs/queue/option"
+	"github.com/stripe/aws-go/gen/sqs"
 )
 
 var defaultStackName = "golang-sqsl-worker-example"
 
-type HandlerFunc func(msg *gsqs.Message) error
+type HandlerFunc func(msg *sqs.Message) error
 
-func (f HandlerFunc) HandleMessage(msg *gsqs.Message) error {
+func (f HandlerFunc) HandleMessage(msg *sqs.Message) error {
 	return f(msg)
 }
 
 type Handler interface {
-	HandleMessage(msg *gsqs.Message) error
+	HandleMessage(msg *sqs.Message) error
 }
 
-func Start(q *sqs.Queue, h Handler) {
+func Start(q *queue.Queue, h Handler) {
 	for {
 		log.Println("worker: Start polling")
 		messages, err := q.ReceiveMessage(option.MaxNumberOfMessages(10))
@@ -37,14 +36,14 @@ func Start(q *sqs.Queue, h Handler) {
 }
 
 // poll launches goroutine per received message and wait for all message to be processed
-func run(q *sqs.Queue, h Handler, messages []gsqs.Message) {
+func run(q *queue.Queue, h Handler, messages []sqs.Message) {
 	numMessages := len(messages)
 	log.Printf("worker: Received %d messages", numMessages)
 
 	var wg sync.WaitGroup
 	wg.Add(numMessages)
 	for i := range messages {
-		go func(m *gsqs.Message) {
+		go func(m *sqs.Message) {
 			// launch goroutine
 			log.Println("worker: Spawned worker goroutine")
 			defer wg.Done()
@@ -57,7 +56,7 @@ func run(q *sqs.Queue, h Handler, messages []gsqs.Message) {
 	wg.Wait()
 }
 
-func handleMessage(q *sqs.Queue, m *gsqs.Message, h Handler) error {
+func handleMessage(q *queue.Queue, m *sqs.Message, h Handler) error {
 	var err error
 	err = h.HandleMessage(m)
 	if err != nil {
