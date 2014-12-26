@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/nabeken/golang-sqs-worker-example/worker"
-
 	"github.com/stripe/aws-go/aws"
 	"github.com/stripe/aws-go/gen/sqs"
+
+	"github.com/nabeken/golang-sqs-worker-example/worker"
 )
 
 var flagQueue = flag.String("q", "example", "specify a queue name")
